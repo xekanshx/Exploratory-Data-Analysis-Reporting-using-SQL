@@ -1,0 +1,28 @@
+/*
+********************************************************************************
+Temporal Data Analysis
+********************************************************************************
+Goal:
+    - Identify the earliest and latest dates within the dataset.
+    - Assess the historical coverage of available records.
+
+SQL Features Utilized:
+    - Aggregate functions (MIN, MAX)
+    - Date calculations using DATEDIFF
+********************************************************************************
+*/
+
+-- Retrieve earliest and latest sales dates along with the span in months
+SELECT
+    MIN(order_date) AS earliest_order_date,
+    MAX(order_date) AS most_recent_order_date,
+    DATEDIFF(MONTH, MIN(order_date), MAX(order_date)) AS total_order_months
+FROM gold.fact_sales;
+
+-- Calculate age range of customers using birthdate information
+SELECT
+    MIN(birthdate) AS earliest_birthdate,
+    DATEDIFF(YEAR, MIN(birthdate), GETDATE()) AS max_customer_age,
+    MAX(birthdate) AS latest_birthdate,
+    DATEDIFF(YEAR, MAX(birthdate), GETDATE()) AS min_customer_age
+FROM gold.dim_customers;
