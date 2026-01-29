@@ -1,0 +1,76 @@
+/*
+********************************************************************************
+Comparative Performance Review (YoY / Relative Benchmarks)
+********************************************************************************
+Objective:
+    - Evaluate how products perform across time periods.
+    - Compare yearly sales against historical averages and prior-year results.
+    - Highlight growth, decline, or stable behavior.
+
+SQL Techniques Applied:
+    - LAG for prior-period comparisons
+    - Windowed AVG for benchmark calculations
+    - CASE expressions for performance labeling
+********************************************************************************
+*/
+
+-- Prepare annual sales figures per product
+WITH product_sales_by_year AS (
+    SELECT
+        YEAR(fs.order_date) AS sales_year,
+        dp.product_name,
+        SUM(fs.sales_amount) AS yearly_sales
+    FROM gold.fact_sales AS fs
+    LEFT JOIN gold.dim_products AS dp
+        ON fs.product_key = dp.product_key
+    WHERE fs.order_date IS NOT NULL
+    GROUP BY
+        YEAR(fs.order_date),
+        dp.product_name
+)
+SELECT
+    sales_year,
+    product_name,
+    yearly_sales,
+    
+    -- Comparison against product’s historical average
+    AVG(yearly_sales) OVER (
+        PARTITION BY product_name
+    ) AS avg_yearly_sales,
+    
+    yearly_sales 
+        - AVG(yearly_sales) OVER (PARTITION BY product_name) AS variance_from_avg,
+    
+    CASE
+        WHEN yearly_sales 
+             - AVG(yearly_sales) OVER (PARTITION BY product_name) > 0
+            THEN 'Above Avg'
+        WHEN yearly_sales 
+             - AVG(yearly_sales) OVER (PARTITION BY product_name) < 0
+            THEN 'Below Avg'
+        ELSE 'Avg'
+    END AS avg_performance_flag,
+
+    -- Year-over-year comparison
+    LAG(yearly_sales) OVER (
+        PARTITION BY product_name
+        ORDER BY sales_year
+    ) AS prior_year_sales,
+
+    yearly_sales 
+        - LAG(yearly_sales) OVER (PARTITION BY product_name ORDER BY sales_year) 
+        AS yoy_difference,
+
+    CASE
+        WHEN yearly_sales 
+             - LAG(yearly_sales) OVER (PARTITION BY product_name ORDER BY sales_year) > 0
+            THEN 'Increase'
+        WHEN yearly_sales 
+             - LAG(yearly_sales) OVER (PARTITION BY product_name ORDER BY sales_year) < 0
+            THEN 'Decrease'
+        ELSE 'No Change'
+    END AS yoy_trend
+FROM product_sales_by_year
+ORDER BY
+    product_name,
+    sales_year;
