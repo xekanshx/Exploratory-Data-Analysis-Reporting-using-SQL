@@ -1,0 +1,30 @@
+/*
+********************************************************************************
+Dimension Table Review
+********************************************************************************
+Objective:
+    - Examine the contents and structure of key dimension tables.
+
+Techniques Applied:
+    - DISTINCT filtering
+    - Sorted result sets using ORDER BY
+********************************************************************************
+*/
+
+-- Display all distinct customer origin countries
+SELECT DISTINCT
+    country
+FROM gold.dim_customers
+ORDER BY
+    country;
+
+-- Display distinct product hierarchies including category breakdowns
+SELECT DISTINCT
+    category,
+    subcategory,
+    product_name
+FROM gold.dim_products
+ORDER BY
+    category,
+    subcategory,
+    product_name;
