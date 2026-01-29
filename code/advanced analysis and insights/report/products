@@ -1,0 +1,123 @@
+/*
+********************************************************************************
+Product Performance Report
+********************************************************************************
+Objective:
+    - Deliver a comprehensive overview of product performance and lifecycle.
+
+Key Components:
+    1. Collects core product attributes (name, hierarchy, and cost).
+    2. Classifies products by revenue contribution (High, Medium, Low).
+    3. Aggregates product-centric metrics:
+        - number of orders
+        - total revenue
+        - total units sold
+        - unique customer count
+        - active lifespan (months)
+    4. Computes analytical KPIs:
+        - recency (months since most recent sale)
+        - average revenue per order
+        - average revenue per month
+********************************************************************************
+*/
+
+-- =============================================================================
+-- View Definition: gold.report_products
+-- =============================================================================
+IF OBJECT_ID('gold.report_products', 'V') IS NOT NULL
+    DROP VIEW gold.report_products;
+GO
+
+CREATE VIEW gold.report_products AS
+
+WITH sales_base AS (
+/*---------------------------------------------------------------------------
+Step 1: Base Dataset
+        Join sales transactions with product attributes
+---------------------------------------------------------------------------*/
+    SELECT
+        fs.order_number,
+        fs.order_date,
+        fs.customer_key,
+        fs.sales_amount,
+        fs.quantity,
+        dp.product_key,
+        dp.product_name,
+        dp.category,
+        dp.subcategory,
+        dp.cost
+    FROM gold.fact_sales AS fs
+    LEFT JOIN gold.dim_products AS dp
+        ON fs.product_key = dp.product_key
+    WHERE fs.order_date IS NOT NULL
+),
+
+product_summary AS (
+/*---------------------------------------------------------------------------
+Step 2: Product-Level Aggregation
+        Compute core metrics per product
+---------------------------------------------------------------------------*/
+SELECT
+    product_key,
+    product_name,
+    category,
+    subcategory,
+    cost,
+    DATEDIFF(MONTH, MIN(order_date), MAX(order_date)) AS lifespan,
+    MAX(order_date) AS most_recent_sale,
+    COUNT(DISTINCT order_number) AS order_count,
+    COUNT(DISTINCT customer_key) AS customer_count,
+    SUM(sales_amount) AS total_revenue,
+    SUM(quantity) AS units_sold,
+    ROUND(
+        AVG(CAST(sales_amount AS FLOAT) / NULLIF(quantity, 0)),
+        1
+    ) AS avg_unit_price
+FROM sales_base
+GROUP BY
+    product_key,
+    product_name,
+    category,
+    subcategory,
+    cost
+)
+
+/*---------------------------------------------------------------------------
+Step 3: Final Output
+        Combine attributes, segments, and KPIs
+---------------------------------------------------------------------------*/
+SELECT
+    product_key,
+    product_name,
+    category,
+    subcategory,
+    cost,
+    most_recent_sale,
+    DATEDIFF(MONTH, most_recent_sale, GETDATE()) AS months_since_last_sale,
+
+    -- Revenue-based product segmentation
+    CASE
+        WHEN total_revenue > 50000 THEN 'High-Performer'
+        WHEN total_revenue >= 10000 THEN 'Mid-Range'
+        ELSE 'Low-Performer'
+    END AS product_segment,
+
+    lifespan,
+    order_count AS total_orders,
+    total_revenue AS total_sales,
+    units_sold AS total_quantity,
+    customer_count AS total_customers,
+    avg_unit_price AS avg_selling_price,
+
+    -- Average revenue per order
+    CASE
+        WHEN order_count = 0 THEN 0
+        ELSE total_revenue / order_count
+    END AS avg_order_revenue,
+
+    -- Average monthly revenue
+    CASE
+        WHEN lifespan = 0 THEN total_revenue
+        ELSE total_revenue / lifespan
+    END AS avg_monthly_revenue
+FROM product_summary;
