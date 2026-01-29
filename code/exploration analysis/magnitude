@@ -1,0 +1,93 @@
+/*
+********************************************************************************
+Scale & Distribution Analysis
+********************************************************************************
+Objective:
+    - Measure volumes and values across key dimensions.
+    - Analyze how data is distributed by category and attribute.
+
+SQL Constructs Utilized:
+    - Aggregations: SUM, COUNT, AVG
+    - GROUP BY with sorted outputs using ORDER BY
+********************************************************************************
+*/
+
+-- Count customers by country
+SELECT
+    country,
+    COUNT(customer_key) AS customer_count
+FROM gold.dim_customers
+GROUP BY
+    country
+ORDER BY
+    customer_count DESC;
+
+-- Count customers by gender
+SELECT
+    gender,
+    COUNT(customer_key) AS customer_count
+FROM gold.dim_customers
+GROUP BY
+    gender
+ORDER BY
+    customer_count DESC;
+
+-- Count products within each category
+SELECT
+    category,
+    COUNT(product_key) AS product_count
+FROM gold.dim_products
+GROUP BY
+    category
+ORDER BY
+    product_count DESC;
+
+-- Compute average product cost per category
+SELECT
+    category,
+    AVG(cost) AS average_cost
+FROM gold.dim_products
+GROUP BY
+    category
+ORDER BY
+    average_cost DESC;
+
+-- Calculate revenue contribution by product category
+SELECT
+    p.category,
+    SUM(f.sales_amount) AS category_revenue
+FROM gold.fact_sales AS f
+LEFT JOIN gold.dim_products AS p
+    ON p.product_key = f.product_key
+GROUP BY
+    p.category
+ORDER BY
+    category_revenue DESC;
+
+-- Calculate total revenue per customer
+SELECT
+    c.customer_key,
+    c.first_name,
+    c.last_name,
+    SUM(f.sales_amount) AS customer_revenue
+FROM gold.fact_sales AS f
+LEFT JOIN gold.dim_customers AS c
+    ON c.customer_key = f.customer_key
+GROUP BY
+    c.customer_key,
+    c.first_name,
+    c.last_name
+ORDER BY
+    customer_revenue DESC;
+
+-- Summarize quantity of items sold by customer country
+SELECT
+    c.country,
+    SUM(f.quantity) AS items_sold
+FROM gold.fact_sales AS f
+LEFT JOIN gold.dim_customers AS c
+    ON c.customer_key = f.customer_key
+GROUP BY
+    c.country
+ORDER BY
+    items_sold DESC;
