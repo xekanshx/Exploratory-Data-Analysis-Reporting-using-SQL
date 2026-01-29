@@ -1,0 +1,68 @@
+/*
+********************************************************************************
+Segmentation & Classification Analysis
+********************************************************************************
+Objective:
+    - Categorize records into logical segments for focused analysis.
+    - Support customer profiling, product grouping, and behavioral insights.
+
+SQL Logic Employed:
+    - CASE expressions for custom segment definitions
+    - GROUP BY for aggregating segmented results
+********************************************************************************
+*/
+
+-- Categorize products by cost bands and count items per band
+WITH product_cost_buckets AS (
+    SELECT
+        product_key,
+        product_name,
+        cost,
+        CASE
+            WHEN cost < 100 THEN 'Below 100'
+            WHEN cost BETWEEN 100 AND 500 THEN '100–500'
+            WHEN cost BETWEEN 500 AND 1000 THEN '500–1000'
+            ELSE 'Above 1000'
+        END AS cost_band
+    FROM gold.dim_products
+)
+SELECT
+    cost_band,
+    COUNT(product_key) AS product_count
+FROM product_cost_buckets
+GROUP BY
+    cost_band
+ORDER BY
+    product_count DESC;
+
+-- Segment customers based on tenure and total spend
+WITH customer_value_profile AS (
+    SELECT
+        dc.customer_key,
+        SUM(fs.sales_amount) AS lifetime_spend,
+        MIN(fs.order_date) AS first_purchase_date,
+        MAX(fs.order_date) AS last_purchase_date,
+        DATEDIFF(month, MIN(fs.order_date), MAX(fs.order_date)) AS customer_tenure
+    FROM gold.fact_sales AS fs
+    LEFT JOIN gold.dim_customers AS dc
+        ON fs.customer_key = dc.customer_key
+    GROUP BY
+        dc.customer_key
+)
+SELECT
+    segment_label,
+    COUNT(customer_key) AS customer_count
+FROM (
+    SELECT
+        customer_key,
+        CASE
+            WHEN customer_tenure >= 12 AND lifetime_spend > 5000 THEN 'VIP'
+            WHEN customer_tenure >= 12 AND lifetime_spend <= 5000 THEN 'Regular'
+            ELSE 'New'
+        END AS segment_label
+    FROM customer_value_profile
+) AS customer_segments
+GROUP BY
+    segment_label
+ORDER BY
+    customer_count DESC;
