@@ -1,0 +1,120 @@
+/*
+********************************************************************************
+Customer Analytics Report
+********************************************************************************
+Objective:
+    - Provide a consolidated view of customer demographics and behavior.
+
+Key Features:
+    1. Captures core customer attributes (identity, age, transactions).
+    2. Classifies customers by value segment and age band.
+    3. Computes customer-level aggregates:
+        - order count
+        - total revenue
+        - total quantity purchased
+        - product diversity
+        - customer lifetime (months)
+    4. Derives performance KPIs:
+        - recency (months since most recent purchase)
+        - average order value
+        - average monthly expenditure
+********************************************************************************
+*/
+
+-- =============================================================================
+-- View Definition: gold.report_customers
+-- =============================================================================
+IF OBJECT_ID('gold.report_customers', 'V') IS NOT NULL
+    DROP VIEW gold.report_customers;
+GO
+
+CREATE VIEW gold.report_customers AS
+
+WITH base_data AS (
+/*---------------------------------------------------------------------------
+Step 1: Base Dataset
+        Collect transactional and demographic attributes
+---------------------------------------------------------------------------*/
+SELECT
+    fs.order_number,
+    fs.product_key,
+    fs.order_date,
+    fs.sales_amount,
+    fs.quantity,
+    dc.customer_key,
+    dc.customer_number,
+    CONCAT(dc.first_name, ' ', dc.last_name) AS customer_name,
+    DATEDIFF(YEAR, dc.birthdate, GETDATE()) AS age
+FROM gold.fact_sales AS fs
+LEFT JOIN gold.dim_customers AS dc
+    ON dc.customer_key = fs.customer_key
+WHERE fs.order_date IS NOT NULL
+),
+
+customer_summary AS (
+/*---------------------------------------------------------------------------
+Step 2: Customer-Level Aggregation
+        Summarize behavioral metrics per customer
+---------------------------------------------------------------------------*/
+SELECT
+    customer_key,
+    customer_number,
+    customer_name,
+    age,
+    COUNT(DISTINCT order_number) AS total_orders,
+    SUM(sales_amount) AS total_sales,
+    SUM(quantity) AS total_quantity,
+    COUNT(DISTINCT product_key) AS total_products,
+    MAX(order_date) AS last_order_date,
+    DATEDIFF(MONTH, MIN(order_date), MAX(order_date)) AS lifespan
+FROM base_data
+GROUP BY
+    customer_key,
+    customer_number,
+    customer_name,
+    age
+)
+
+SELECT
+    customer_key,
+    customer_number,
+    customer_name,
+    age,
+
+    -- Age band classification
+    CASE
+        WHEN age < 20 THEN 'Under 20'
+        WHEN age BETWEEN 20 AND 29 THEN '20-29'
+        WHEN age BETWEEN 30 AND 39 THEN '30-39'
+        WHEN age BETWEEN 40 AND 49 THEN '40-49'
+        ELSE '50 and above'
+    END AS age_group,
+
+    -- Customer value segmentation
+    CASE
+        WHEN lifespan >= 12 AND total_sales > 5000 THEN 'VIP'
+        WHEN lifespan >= 12 AND total_sales <= 5000 THEN 'Regular'
+        ELSE 'New'
+    END AS customer_segment,
+
+    last_order_date,
+    DATEDIFF(MONTH, last_order_date, GETDATE()) AS recency,
+
+    total_orders,
+    total_sales,
+    total_quantity,
+    total_products,
+    lifespan,
+
+    -- Average order value (AOV)
+    CASE
+        WHEN total_sales = 0 THEN 0
+        ELSE total_sales / total_orders
+    END AS avg_order_value,
+
+    -- Average monthly spend
+    CASE
+        WHEN lifespan = 0 THEN total_sales
+        ELSE total_sales / lifespan
+    END AS avg_monthly_spend
+FROM customer_summary;
